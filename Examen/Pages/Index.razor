@@ -1,0 +1,254 @@
+﻿@page "/"
+
+@using System.Collections.Generic
+@using System.ComponentModel.DataAnnotations
+
+<h2>Productos</h2>
+@if (alert != false)
+{
+    <div class="alert alert-danger" role="alert">
+        <p>@msg</p>
+    </div>
+}
+<EditForm Model="product" OnValidSubmit="Guardar">
+    <DataAnnotationsValidator />
+    <div class="row mb-3">
+        <label for="txtCorreo" class="col-2 col-form-label">Inventario</label>
+        <div class="col-10">
+            <InputNumber class="form-control" id="txtCorreo" @bind-Value="product.Inventario" />
+            <ValidationMessage For="@(() => product.Inventario)" />
+        </div>
+    </div>
+    <div class="row mb-3">
+        <label for="txtNombre" class="col-2 col-form-label">Nombre</label>
+        <div class="col-10">
+            <InputText class="form-control" id="txtNombre" @bind-Value="product.Nombre" />
+            <ValidationMessage For="@(() => product.Nombre)" />
+        </div>
+    </div>
+    <div class="row mb-3">
+        <label for="txtCalificacion" class="col-2 col-form-label">Departamento</label>
+        <div class="col-10">
+            <InputRadioGroup @bind-Value="product.Departamento">
+                @foreach (var item in Departamentos)
+                {
+                    <InputRadio Value="@item" id="@($"radio_{item}")" />
+                    <label for="@($"radio_{item}")">@item</label>
+                }
+                <ValidationMessage For="@(() => product.Departamento)" />
+            </InputRadioGroup>
+        </div>
+    </div>
+    <div class="row mb-3">
+        <div class="col-10 offset-2">
+            @if (productoOriginal != null)
+            {
+                <button class="btn btn-primary" type="submit">Actualizar</button>
+                <button class="btn btn-secondary" type="button" @onclick="Cancelar">Cancelar</button>
+            }
+            else
+            {
+                <button class="btn btn-primary" type="submit">Guardar</button>
+            }
+        </div>
+    </div>
+</EditForm>
+
+<hr />
+
+<div class="row">
+    <div class="col">
+        <button class="btn btn-primary" @onclick="ToggleTabla">@botonMostrarTexto</button>
+
+        @if (mostrarExistencias)
+        {
+            <h3>Existencias</h3>
+            <table class="table table-striped table-dark" border="1">
+                <thead class="thead-light">
+                    <tr>
+                        <th scope="col">Tipo</th>
+                        <th scope="col">Cantidad</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in Existencias)
+                    {
+                        <tr>
+                            <td>@item.Key</td>
+                            <td>@item.Value</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+        else
+        {
+            <h3>Productos en el registro</h3>
+            @if (listaProductos != null && listaProductos.Count > 0)
+            {
+                <table class="table table-striped table-dark" border="1">
+                    <thead class="thead-light">
+                        <tr>
+                            <th scope="col">Nombre</th>
+                            <th scope="col">Inventario</th>
+                            <th scope="col">Departamento</th>
+                            <th scope="col">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in listaProductos)
+                        {
+                            <tr>
+                                <td>@item.Nombre</td>
+                                <td>@item.Inventario</td>
+                                <td>@item.Departamento</td>
+                                <td>
+                                    <button class="btn btn-danger btn-sm" @onclick="() => Eliminar(item)">Eliminar</button>
+                                    <button class="btn btn-success btn-sm" @onclick="() => Editar(item)">Editar</button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    private Producto product = new Producto("", 0, "");
+    private Producto productoOriginal = null;
+    private List<Producto> listaProductos = new List<Producto>();
+    private List<string> Departamentos = new List<string> { "frutas", "verduras", "lacteos" };
+    private Dictionary<string, int> Existencias = new Dictionary<string, int>();
+    private bool alert = false;
+    private string msg = "";
+    private bool mostrarExistencias = false;
+    private string botonMostrarTexto = "Mostrar Existencias";
+
+    private void Guardar()
+    {
+        if (IsValid(product))
+        {
+            if (productoOriginal == null)
+            {
+                if (!VerificarExistencia(product.Inventario))
+                {
+                    listaProductos.Add(product);
+                    IncrementarExistencia(product.Departamento);
+                    LimpiarFormulario();
+                }
+                else
+                {
+                    alert = true;
+                    msg = "Este número ya está registrado";
+                }
+            }
+            else
+            {
+                Actualizar();
+            }
+        }
+    }
+
+    private void Eliminar(Producto product)
+    {
+        listaProductos.Remove(product);
+        DecrementarExistencia(product.Departamento);
+    }
+
+    private void Editar(Producto producto)
+    {
+        productoOriginal = producto;
+        product = new Producto(producto.Nombre, producto.Inventario, producto.Departamento);
+    }
+
+    private void Actualizar()
+    {
+        if (IsValid(product))
+        {
+            bool inventarioDisponible = !VerificarExistencia(product.Inventario) || product.Inventario == productoOriginal.Inventario;
+
+            if (inventarioDisponible)
+            {
+                productoOriginal.Nombre = product.Nombre;
+                productoOriginal.Inventario = product.Inventario;
+                productoOriginal.Departamento = product.Departamento;
+
+                DecrementarExistencia(productoOriginal.Departamento);
+                IncrementarExistencia(product.Departamento);
+                productoOriginal = null;
+                LimpiarFormulario();
+            }
+            else
+            {
+                alert = true;
+                msg = "No se puede actualizar el producto. Asegúrese de que el número de inventario sea único.";
+            }
+        }
+    }
+
+    private void Cancelar()
+    {
+        if (productoOriginal != null)
+        {
+            product = new Producto(productoOriginal.Nombre, productoOriginal.Inventario, productoOriginal.Departamento);
+        }
+        productoOriginal = null;
+        botonMostrarTexto = "Mostrar Existencias";
+    }
+
+    private bool VerificarExistencia(int numero)
+    {
+        return listaProductos.Any(p => p.Inventario == numero);
+    }
+
+    private void IncrementarExistencia(string departamento)
+    {
+        if (Existencias.ContainsKey(departamento))
+        {
+            Existencias[departamento]++;
+        }
+        else
+        {
+            Existencias[departamento] = 1;
+        }
+    }
+
+    private void DecrementarExistencia(string departamento)
+    {
+        if (Existencias.ContainsKey(departamento) && Existencias[departamento] > 0)
+        {
+            Existencias[departamento]--;
+        }
+    }
+
+    private void ToggleTabla()
+    {
+        mostrarExistencias = !mostrarExistencias;
+        botonMostrarTexto = mostrarExistencias ? "Mostrar Listado" : "Mostrar Existencias";
+    }
+
+    private void LimpiarFormulario()
+    {
+        product = new Producto("", 0, "");
+        alert = false;
+        msg = "";
+        botonMostrarTexto = "Mostrar Existencias";
+    }
+
+    private bool IsValid(Producto producto)
+    {
+        var context = new ValidationContext(producto);
+        var results = new List<ValidationResult>();
+
+        if (Validator.TryValidateObject(producto, context, results, true))
+        {
+            return true;
+        }
+
+        alert = true;
+        msg = string.Join(", ", results.Select(r => r.ErrorMessage));
+        return false;
+    }
+}
